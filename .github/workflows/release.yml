@@ -1,0 +1,57 @@
+name: Build and Release DLSS Swapper
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v1.0, v1.1, etc.
+
+  workflow_dispatch:  # Enables manual trigger from GitHub UI
+
+permissions:
+  contents: write  # Needed to create releases
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'  # Adjust to match your project if different
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish
+        run: |
+          dotnet publish -c Release -o ./publish
+
+      - name: Determine Artifact Name
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "RELEASE_NAME=manual-release-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_ENV
+          else
+            echo "RELEASE_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          fi
+
+      - name: Package Artifacts
+        run: |
+          cd publish
+          zip -r ../dlss-swapper-${{ env.RELEASE_NAME }}.zip .
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dlss-swapper-${{ env.RELEASE_NAME }}.zip
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ env.RELEASE_NAME }}  # This will use manual-release-* if triggered manually
