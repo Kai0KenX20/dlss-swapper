@@ -1,54 +1,47 @@
 name: Build and Release DLSS Swapper
 
 on:
-  workflow_dispatch:  # Manual trigger
   push:
     tags:
-      - 'v*'  # Trigger on tags like v1.0, v2.1, etc.
+      - 'v*'  # Auto trigger on version tags like v1.0
+  workflow_dispatch:  # Allows manual trigger from Actions tab
 
 permissions:
-  contents: write  # Required to create a release
+  contents: write  # Needed to create releases
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest  # Must use Windows for Windows-targeted builds
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK 9.0.102
+      - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.102'
+          dotnet-version: '9.0.x'  # You can adjust to match global.json if needed
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: |
+          dotnet restore -p:EnableWindowsTargeting=true
 
       - name: Build
-        run: dotnet build --configuration Release --no-restore
+        run: |
+          dotnet build --configuration Release --no-restore -p:EnableWindowsTargeting=true
 
       - name: Publish
-        run: dotnet publish -c Release -o ./publish
+        run: |
+          dotnet publish -c Release -o ./publish -p:EnableWindowsTargeting=true
 
       - name: Package Artifacts
         run: |
-          cd publish
-          zip -r ../dlss-swapper-${{ github.ref_name || 'manual' }}.zip .
-          cd ..
+          Compress-Archive -Path ./publish/* -DestinationPath ./dlss-swapper-${{ github.ref_name }}.zip
 
-      - name: Create Release (for tag builds only)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: dlss-swapper-${{ github.ref_name }}.zip
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Artifact (for manual runs)
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: dlss-swapper-build
-          path: dlss-swapper-manual.zip
