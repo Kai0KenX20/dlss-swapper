@@ -3,7 +3,7 @@ name: Build and Release DLSS Swapper
 on:
   push:
     tags:
-      - 'v*'  # Auto trigger on version tags like v1.0
+      - 'v*'  # Trigger on tags like v1.0, v2.0
   workflow_dispatch:  # Allows manual trigger from Actions tab
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'  # You can adjust to match global.json if needed
+          dotnet-version: '9.0.x'
 
       - name: Restore dependencies
         run: |
@@ -34,14 +34,29 @@ jobs:
         run: |
           dotnet publish -c Release -o ./publish -p:EnableWindowsTargeting=true
 
+      - name: Set Artifact Name
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            echo "ARTIFACT_NAME=dlss-swapper-${env:GITHUB_REF_NAME}.zip" >> $env:GITHUB_ENV
+          } else {
+            echo "ARTIFACT_NAME=dlss-swapper-manual.zip" >> $env:GITHUB_ENV
+          }
+        shell: pwsh
+
       - name: Package Artifacts
         run: |
-          Compress-Archive -Path ./publish/* -DestinationPath ./dlss-swapper-${{ github.ref_name }}.zip
+          Compress-Archive -Path ./publish/* -DestinationPath ./${{ env.ARTIFACT_NAME }}
 
-      - name: Create Release
+      - name: Conditional Release Creation
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: dlss-swapper-${{ github.ref_name }}.zip
+          files: ${{ env.ARTIFACT_NAME }}
           draft: false
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Debug Output
+        if: github.ref_type != 'tag'
+        run: |
+          echo "Manual run detected — skipping release upload."
